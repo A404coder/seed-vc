@@ -1,4 +1,5 @@
 import os
+from contextlib import nullcontext
 
 import numpy as np
 
@@ -326,8 +327,8 @@ def main(args):
         F0_ori = f0_fn(ori_waves_16k[0], thred=0.03)
         F0_alt = f0_fn(converted_waves_16k[0], thred=0.03)
 
-        F0_ori = torch.from_numpy(F0_ori).to(device)[None]
-        F0_alt = torch.from_numpy(F0_alt).to(device)[None]
+        F0_ori = torch.from_numpy(F0_ori).float().to(device)[None]
+        F0_alt = torch.from_numpy(F0_alt).float().to(device)[None]
 
         voiced_F0_ori = F0_ori[F0_ori > 1]
         voiced_F0_alt = F0_alt[F0_alt > 1]
@@ -368,7 +369,8 @@ def main(args):
         chunk_cond = cond[:, processed_frames:processed_frames + max_source_window]
         is_last_chunk = processed_frames + max_source_window >= cond.size(1)
         cat_condition = torch.cat([prompt_condition, chunk_cond], dim=1)
-        with torch.autocast(device_type=device.type, dtype=torch.float16 if fp16 else torch.float32):
+        # PyTorch 2.4 does not support MPS autocast; keep full precision on Apple GPUs.
+        with (torch.autocast(device_type="cuda", dtype=torch.float16) if fp16 and device.type == "cuda" else nullcontext()):
             # Voice Conversion
             vc_target = model.cfm.inference(cat_condition,
                                                        torch.LongTensor([cat_condition.size(1)]).to(mel2.device),
